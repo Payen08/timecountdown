@@ -1,0 +1,377 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { 
+  Clock, 
+  Timer, 
+  Watch, 
+  Play, 
+  Pause, 
+  RotateCcw, 
+  Maximize, 
+  Minimize, 
+  Flag,
+  Settings
+} from 'lucide-react';
+
+const BigScreenClock = () => {
+  const [mode, setMode] = useState('clock'); // 'clock', 'timer', 'stopwatch'
+  const [zenMode, setZenMode] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Timer State
+  const [timerDuration, setTimerDuration] = useState(25 * 60);
+  const [timerLeft, setTimerLeft] = useState(25 * 60);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
+  const [timerFinished, setTimerFinished] = useState(false);
+  
+  // Stopwatch State
+  const [stopwatchTime, setStopwatchTime] = useState(0);
+  const [isStopwatchRunning, setIsStopwatchRunning] = useState(false);
+  const [laps, setLaps] = useState([]);
+
+  // Refs
+  const timerRef = useRef(null);
+  const stopwatchRef = useRef(null);
+  const lastTimeRef = useRef(0);
+
+  // --- Clock Logic ---
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // --- Timer Logic ---
+  useEffect(() => {
+    if (isTimerRunning && timerLeft > 0) {
+      timerRef.current = setInterval(() => {
+        setTimerLeft((prev) => {
+          if (prev <= 1) {
+            clearInterval(timerRef.current);
+            setIsTimerRunning(false);
+            setTimerFinished(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      clearInterval(timerRef.current);
+    }
+    return () => clearInterval(timerRef.current);
+  }, [isTimerRunning, timerLeft]);
+
+  // --- Stopwatch Logic ---
+  useEffect(() => {
+    if (isStopwatchRunning) {
+      lastTimeRef.current = Date.now();
+      stopwatchRef.current = requestAnimationFrame(updateStopwatch);
+    } else {
+      cancelAnimationFrame(stopwatchRef.current);
+    }
+    return () => cancelAnimationFrame(stopwatchRef.current);
+  }, [isStopwatchRunning]);
+
+  const updateStopwatch = () => {
+    const now = Date.now();
+    const delta = now - lastTimeRef.current;
+    lastTimeRef.current = now;
+    setStopwatchTime(prev => prev + delta);
+    stopwatchRef.current = requestAnimationFrame(updateStopwatch);
+  };
+
+  // --- Formatters ---
+  const formatTime = (date) => {
+    return date.toLocaleTimeString('zh-CN', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  };
+
+  const formatDate = (date) => {
+    const options = { weekday: 'short', month: 'short', day: 'numeric' }; // Shortened for cleaner look
+    return date.toLocaleDateString('en-US', options).toUpperCase(); // English uppercase looks more "designed"
+  };
+
+  const formatDuration = (seconds) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    
+    if (h > 0) {
+      return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const formatStopwatch = (ms) => {
+    const m = Math.floor(ms / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    const centis = Math.floor((ms % 1000) / 10);
+    return (
+      <div className="flex items-baseline justify-center tabular-nums din-font">
+        <span>{m.toString().padStart(2, '0')}</span>
+        <span className="mx-1 text-white/50">:</span>
+        <span>{s.toString().padStart(2, '0')}</span>
+        <span className="text-[0.4em] ml-4 text-emerald-400">.{centis.toString().padStart(2, '0')}</span>
+      </div>
+    );
+  };
+
+  // --- Handlers ---
+  const toggleTimer = () => {
+    if (timerFinished) {
+      setTimerFinished(false);
+      setTimerLeft(timerDuration);
+    }
+    setIsTimerRunning(!isTimerRunning);
+  };
+
+  const resetTimer = () => {
+    setIsTimerRunning(false);
+    setTimerFinished(false);
+    setTimerLeft(timerDuration);
+  };
+
+  const setPresetTimer = (minutes) => {
+    setIsTimerRunning(false);
+    setTimerFinished(false);
+    setTimerDuration(minutes * 60);
+    setTimerLeft(minutes * 60);
+  };
+
+  const toggleStopwatch = () => setIsStopwatchRunning(!isStopwatchRunning);
+  
+  const resetStopwatch = () => {
+    setIsStopwatchRunning(false);
+    setStopwatchTime(0);
+    setLaps([]);
+  };
+
+  const recordLap = () => {
+    setLaps([stopwatchTime, ...laps]);
+  };
+
+  // --- UI Components ---
+  
+  return (
+    <div className={`flex flex-col h-screen w-full transition-all duration-700 relative overflow-hidden font-sans selection:bg-emerald-500/30 selection:text-emerald-200 text-slate-100`}>
+      
+      {/* Dynamic Background */}
+      <div className={`absolute inset-0 bg-slate-950 z-0 transition-colors duration-1000 ${timerFinished ? 'bg-red-950/90' : ''}`}>
+         {/* Subtle Gradient Mesh */}
+        <div className="absolute top-[-50%] left-[-50%] w-[200%] h-[200%] opacity-20 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-blue-900 via-slate-950 to-slate-950 animate-slow-spin"></div>
+        <div className="absolute top-0 left-0 w-full h-full bg-[linear-gradient(to_bottom,transparent,rgba(0,0,0,0.8))]"></div>
+      </div>
+
+      {/* Top Navigation - Glassmorphism */}
+      <div className={`relative z-20 flex justify-between items-center p-6 transition-all duration-500 ease-out ${zenMode ? '-translate-y-32 opacity-0' : 'translate-y-0 opacity-100'}`}>
+        <div className="flex gap-1 bg-white/5 backdrop-blur-md p-1.5 rounded-2xl border border-white/10 shadow-2xl ring-1 ring-white/5">
+          {[
+            { id: 'clock', icon: Clock, label: 'CLOCK' },
+            { id: 'timer', icon: Timer, label: 'TIMER' },
+            { id: 'stopwatch', icon: Watch, label: 'STOPWATCH' }
+          ].map((item) => (
+            <button
+              key={item.id}
+              onClick={() => { setMode(item.id); setTimerFinished(false); }}
+              className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-bold tracking-wider transition-all duration-300 ${
+                mode === item.id 
+                  ? 'bg-white text-slate-950 shadow-lg scale-100' 
+                  : 'text-slate-400 hover:text-white hover:bg-white/10 scale-95 hover:scale-100'
+              }`}
+            >
+              <item.icon size={14} strokeWidth={3} />
+              <span className="hidden sm:inline">{item.label}</span>
+            </button>
+          ))}
+        </div>
+
+        <button 
+          onClick={() => setZenMode(!zenMode)}
+          className="p-3 rounded-full hover:bg-white/10 text-slate-400 hover:text-white transition-colors border border-transparent hover:border-white/10"
+        >
+          {zenMode ? <Minimize size={20} /> : <Maximize size={20} />}
+        </button>
+      </div>
+
+      {/* Main Content Area */}
+      <div 
+        className="flex-1 flex flex-col items-center justify-center relative z-10 cursor-default"
+        onClick={() => zenMode && setZenMode(false)}
+      >
+        
+        {/* CLOCK VIEW */}
+        {mode === 'clock' && (
+          <div className="text-center animate-in fade-in zoom-in duration-500 flex flex-col items-center">
+            <div className="din-font text-[13vw] sm:text-[18vw] leading-[0.85] font-bold tracking-tight text-white drop-shadow-[0_20px_50px_rgba(0,0,0,0.5)]">
+              {formatTime(currentTime)}
+            </div>
+            <div className="flex items-center gap-6 mt-8 md:mt-12 opacity-60">
+              <div className="h-px w-12 bg-white/50"></div>
+              <div className="text-xl md:text-3xl font-medium tracking-[0.2em] uppercase din-font">
+                {formatDate(currentTime)}
+              </div>
+              <div className="h-px w-12 bg-white/50"></div>
+            </div>
+          </div>
+        )}
+
+        {/* TIMER VIEW */}
+        {mode === 'timer' && (
+          <div className="text-center w-full max-w-6xl px-4 animate-in fade-in slide-in-from-bottom-8 duration-500">
+             {timerFinished ? (
+               <div className="din-font text-[12vw] font-bold text-red-500 animate-pulse mb-8 tracking-tighter">
+                 TIME IS UP
+               </div>
+             ) : (
+              <div className={`din-font leading-[0.85] font-bold tracking-tight mb-12 transition-colors duration-300 ${timerLeft <= 10 && isTimerRunning ? 'text-red-500' : 'text-white'} 
+                ${timerLeft >= 3600 ? 'text-[15vw] sm:text-[20vw]' : 'text-[18vw] sm:text-[25vw]'}`}>
+                {formatDuration(timerLeft)}
+              </div>
+             )}
+
+            {/* Controls */}
+            <div className={`transition-all duration-500 ease-out ${zenMode ? 'opacity-0 pointer-events-none translate-y-20' : 'opacity-100 translate-y-0'}`}>
+              
+              <div className="flex justify-center gap-8 mb-16">
+                <button 
+                  onClick={toggleTimer}
+                  className={`group relative p-8 rounded-[2rem] transition-all duration-300 transform hover:scale-105 active:scale-95 shadow-2xl overflow-hidden ${
+                    isTimerRunning 
+                      ? 'bg-orange-500 hover:bg-orange-400 text-white' 
+                      : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                  }`}
+                >
+                  <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 backdrop-blur-sm"></div>
+                  {isTimerRunning ? <Pause size={48} fill="currentColor" strokeWidth={0} /> : <Play size={48} fill="currentColor" strokeWidth={0} className="ml-2" />}
+                </button>
+                <button 
+                  onClick={resetTimer}
+                  className="p-8 rounded-[2rem] bg-white/5 hover:bg-white/10 border border-white/10 text-white/50 hover:text-white transition-all shadow-xl hover:border-white/30"
+                >
+                  <RotateCcw size={48} strokeWidth={1.5} />
+                </button>
+              </div>
+
+              {/* Minimal Presets */}
+              <div className="flex flex-wrap justify-center gap-4 max-w-3xl mx-auto">
+                {[
+                  { m: 5, l: '05' },
+                  { m: 10, l: '10' },
+                  { m: 25, l: '25' },
+                  { m: 45, l: '45' },
+                  { m: 60, l: '60' }
+                ].map((preset) => (
+                  <button
+                    key={preset.m}
+                    onClick={() => setPresetTimer(preset.m)}
+                    className="w-16 h-16 sm:w-20 sm:h-20 flex flex-col items-center justify-center bg-white/5 border border-white/5 hover:border-emerald-500/50 hover:bg-white/10 rounded-2xl text-slate-300 font-bold transition-all group"
+                  >
+                    <span className="din-font text-2xl sm:text-3xl group-hover:text-emerald-400">{preset.l}</span>
+                    <span className="text-[10px] uppercase tracking-wider opacity-40">Min</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* STOPWATCH VIEW */}
+        {mode === 'stopwatch' && (
+          <div className="text-center w-full animate-in fade-in slide-in-from-right-8 duration-500 flex flex-col items-center">
+            <div className="text-[14vw] sm:text-[18vw] leading-[0.85] font-bold tracking-tight text-white mb-12">
+              {formatStopwatch(stopwatchTime)}
+            </div>
+
+            <div className={`transition-all duration-500 w-full max-w-2xl ${zenMode ? 'opacity-0 pointer-events-none translate-y-20' : 'opacity-100 translate-y-0'}`}>
+              <div className="flex justify-center gap-6 mb-12">
+                <button 
+                  onClick={toggleStopwatch}
+                  className={`flex-1 max-w-[120px] h-[80px] rounded-2xl flex items-center justify-center transition-all hover:scale-105 active:scale-95 shadow-xl ${
+                    isStopwatchRunning 
+                      ? 'bg-orange-500 hover:bg-orange-400 text-white' 
+                      : 'bg-emerald-500 hover:bg-emerald-400 text-slate-950'
+                  }`}
+                >
+                  {isStopwatchRunning ? <Pause size={32} fill="currentColor" /> : <Play size={32} fill="currentColor" className="ml-1" />}
+                </button>
+                
+                <button 
+                  onClick={recordLap}
+                  disabled={!isStopwatchRunning}
+                  className="flex-1 max-w-[120px] h-[80px] rounded-2xl flex items-center justify-center bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-30 disabled:cursor-not-allowed text-white transition-all"
+                >
+                  <Flag size={32} />
+                </button>
+
+                <button 
+                  onClick={resetStopwatch}
+                  className="flex-1 max-w-[120px] h-[80px] rounded-2xl flex items-center justify-center bg-white/5 hover:bg-red-500/20 border border-white/10 hover:border-red-500/50 text-white/50 hover:text-red-400 transition-all"
+                >
+                  <RotateCcw size={32} />
+                </button>
+              </div>
+
+              {/* Modern Laps List */}
+              {laps.length > 0 && (
+                <div className="w-full max-h-60 overflow-y-auto bg-black/20 rounded-2xl backdrop-blur-md custom-scrollbar border border-white/5">
+                  <div className="grid grid-cols-1 divide-y divide-white/5">
+                    {laps.map((lapTime, index) => {
+                      const prevLap = laps[index + 1] || 0;
+                      const diff = lapTime - prevLap;
+                      return (
+                        <div key={index} className="flex items-center justify-between p-4 hover:bg-white/5 transition-colors group">
+                          <span className="text-xs font-bold text-white/30 group-hover:text-emerald-500/70 w-8">
+                            {(laps.length - index).toString().padStart(2, '0')}
+                          </span>
+                          <span className="din-font text-2xl text-emerald-400 tracking-wide">
+                            {Math.floor(lapTime / 60000).toString().padStart(2, '0')}:
+                            {Math.floor((lapTime % 60000) / 1000).toString().padStart(2, '0')}.
+                            <span className="text-lg opacity-60">{Math.floor((lapTime % 1000) / 10).toString().padStart(2, '0')}</span>
+                          </span>
+                          <span className="text-xs font-mono text-white/40 tabular-nums">
+                            +{Math.floor(diff / 1000)}.{(diff % 1000).toString().padStart(3, '0')}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <style>{`
+        /* Import Barlow Condensed to mimic DIN */
+        @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&display=swap');
+        
+        .din-font {
+          font-family: 'Barlow Condensed', sans-serif;
+          font-variant-numeric: tabular-nums;
+        }
+
+        @keyframes slow-spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+        .animate-slow-spin {
+          animation: slow-spin 60s linear infinite;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: rgba(0,0,0,0.1);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255,255,255,0.2);
+          border-radius: 2px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(255,255,255,0.4);
+        }
+      `}</style>
+    </div>
+  );
+};
+
+export default BigScreenClock;
